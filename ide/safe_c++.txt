@@ -1,0 +1,341 @@
+Summary:
+ -C++ is safe unless you use pointers
+ -Valgrind is slow and doesn't detect all errors. Also only works on linux.
+  -Same for basically all other tools that do this.
+ -Safety for dynamically allocated memory
+ -Safety for stack memory, globals, and registers
+ -Safety for C++ standard containers and arrays
+ -Safe casts; i.e. cannot cast pointers to data and vice versa
+ -Safe threads
+ -Reproducable threads
+ -Support most legal C++ code but you have to follow some rules; does static analysis on the code to make sure it is legal
+ -Use cases:
+  -Verification of existing C++ code
+  -Sandboxing C++ code without seperate processes
+  -Reproducable C++ programs
+   -The program generates an input file while it is running
+   -The same exact sequence of instructions can be replayed by running the program
+    using its input file.
+
+Old: Dynamically allocated memory:
+ -Want high safety with at least C#-level performance. Also want to be able to relax some rules to still end up with
+  a deterministic program that has good performance.
+  -For example, use garbage collection for heap and disable dangling pointer detection, or batch frees.
+ -Word size is 8 bytes
+ -Split into blocks of 64 words
+ -Each block has a metadata record
+  -The record consists of a block version number, a 64 bit bitmask, and a pointer to a resizable array of
+   word version numbers
+ -There is a global register (i.e. not saved during function calls) for the global version number
+ -An explicit dangling pointer has the value 0xFFFF... (all 1s)
+  -This is different from a null pointer.
+  -Note: Comparing dangling pointers is sometimes unsafe and should be banned. It is safe in some hard to detect, useless
+   cases.
+ -Operations:
+  -Allocate block (from OS)
+  -Free block (to OS)
+  -Allocate word
+  -Free word
+  -Allocate consecutive region of words in a block
+  -Free consecutive region of words in a block
+  -Reallocate word
+  -Dereference pointer
+  -Copy pointer
+  -Compare pointers for equality
+  -Compare pointers using less than
+ -Suboperations:
+  -Compute block metadata location and offset from pointer
+  -Lookup from block metadata array. It is conceptually a 64-entry array, but is stored in a compact form
+  -Assign to block metadata array
+  -Determine if pointer is dangling
+  -Refresh non-dangling pointer
+ -Compute block metadata location and offset from pointer:
+  -For a 64-word (512 bytes) block, there is a 3-word (24 bytes) block metadata. Can add an extra word to the metadata
+   for shits and giggles, so 4-words (32 bytes).
+   -The bitmask is first, then the pointer, then the version number, then an extra word. The extra word can be used for
+    a second array, so that each array only has 32 entries.
+  -So, the heap starts at address HEAP and grows forward. PTR is the pointer's address. META is the metadata's address.
+   Metadata starts at address METAHEAP and grows forward.
+   -Metadata location is METAHEAP + (PTR & ~0x1FF - HEAP) >> 4 = (METAHEAP - (HEAP >> 4)) + (PTR & ~0x1FF) >> 4
+   -Offset is (PTR & 0x1FF) >> 3
+   -The locations of the metaheap and heap should be fixed so that the calculation involves only PTR and immediates, and
+    only 3 operations.
+ -Lookup from block metadata array:
+  -Conceptually, there is one 64 word array. It is implemented as two 32-word arrays (since resizing is slow).
+  -Take the metadata bitmask, and find the number of set bits whose index is less than the offset to be looked up
+   -So, to look up offset 4 (fifth element) when array is ...11100110, you take the 0, 1, 2, 3 bits (0110) and count the number
+    of set bits (2).
+    -To do this, say your metadata array offset is METAOFF and the bitmask is METABIT. You calculate:
+     METABIT & ( (1 << METAOFF) - 1 ) and then find the number of set bits in that using a CPU instruction that does that
+    -Note: the last bit is not used.
+   -The metadata bitmask is two 32-bit bitmasks. If the offset is >= 32, subtract 32 from it and use the second bitmask and
+    second array.
+   -Look up in the appropriate array using the calculated number of set bits.
+   -So, for the 0th metadata array entry, you always use the first element of the first array. Same for the 32nd one
+    except it uses the second array.
+ -Assign to block metadata array:
+  -Say you're assigning to position POS in the metadata array, and the bitmask is METABIT
+  -Find the associated bit in the metadata array (the first entry does not have a bit associated with it, so pretend there
+   is one bit before the first bit). The bit index is POS - 1. The value of the bit before the first bit is always '1'.
+  -If that bit and the next one are both '1', you can just change the associated value in the array.
+  -If the bit is 0 and the next bit is '1', you have to set the bit to '1' and allocate a new value in the array.
+   -So, you have 10110 and you want to assign to position 4. That bit is 0 and the next bit is 1. The array is:
+    BIT1_V, BIT2_V, BIT4_V. You add an entry BIT3_V for the bit at index 3 (4th bit); there are two entries before
+    that bit so you add it as the 3rd entry in the array. The final bitmask is 11110 and the final array is:
+    BIT1_V, BIT2_V, BIT3_V, BIT4_V
+   -Resizing the array might involve allocating memory or moving a bunch of entries over. It is slow.
+  -If the bit is 1 and the next bit is 0, you assign the value and also assign the next bit's value (allocating a new entry)
+   to the old value.
+  -...
+  -It's probably a good idea to have the array never shrink. The allocator should try to align large objects so that they
+   are allocated at fixed intervals in a shared memory pool. The allocator could also preconfigure the array so that it
+   has bit positions at the 
+   -If the array is implemented like this, it would be sufficient to store the offset and interval instead of a bitmask.
+    The array is never resized then, and all allocations in that block are aligned using the specified offset and interval.
+   -So, you have one memory pool for objects that are 1 word, one for 2 words, 3 words, etc. Each pool has blocks associated
+    with it. To allocate memory, you pick a block that has free slots and iterate the version numbers to find a free slot.
+   -The function stack uses a size of 1 word and object can span multiple words, which makes them slow to allocate but
+    stack allocations should be rare anyway.
+    -The stack is also usually pretty small.
+   -There are 64 entries per block, so the largest object size is 64 words and the smallest is one word, so 5 bits are 
+    required for the interval. So 2 bytes (bias and interval); this can be packed into the version number so that the
+    total metadata size is 2 words instead of 4. Can store the data in the two least significant bytes of the version number
+    so that it can be used like normal, except incremented by 2^16 instead of by 1. The two least bytes will not
+    affect anything.
+   -The allocator is fast.
+  -Under that scheme, lookup and assignment:
+   -Array index is: (offset + bias) / interval
+   -Can read/write to the array like normal
+  -For large resizable arrays (vectors), blocks where each object has the same version number can have their interval changed
+   to 64. So, you have a vector<int*> and append int*s to it. If you append a bunch of them at once, when the block is full,
+   its arrays pointers will now point to the block version number and the interval is 64. The version number can go down
+   but it can't increase...
+ -Determine if pointer is dangling
+  -A pointer is a normal pointer followed by a version number, so 2 words
+  -If the version number equals the global version, it is not dangling
+  -Otherwise, read the block metadata. If the version number is >= the block metadata's version number, it is not dangling.
+  -Otherwise, read the value of the metadata array at the offset. If the pointer version number is >= the metadata array's
+   version number, the value is not dangling. Otherwise it is dangling.
+ -Refresh non-dangling pointer
+  -Set the pointer's version number to the global version number. This is only legal if the pointer is not dangling. This
+   is done whenever a pointer is accessed to avoid having to read the arrays.
+ -Allocate block (from OS)
+  -You have to set the bias and interval. This also sets up the metadata and allocates the metadata array.
+ -Free block (to OS)
+  -Frees the metadata array (using a normal memory allocator) and sets the metadata record to be deallocated (high
+   version numbers, bias=0, interval=64).
+  -This is safe since the version number will have been increased if the block is reallocated, so dangling pointers will be
+   detected.
+ -Allocate word
+  -Make sure it is free (i.e. block version number = 0xFFFF.... with 0 bias, 64 interval)
+   -A free block also has its array pointer pointing at its own version number. This is true for all blocks that have an
+    interval of 64.
+  -Set the version number of the entry in the block metadata to the global version number
+  -Set the block's version number to the global version number
+  -Return a pointer to the word whose version number is the global version number
+  -If the block is not allocated from the OS, this will cause a segfault which is fine.
+ -Free word
+  -Make sure it is allocated (i.e. not free)
+  -Set the version number for the metadata entry to the magic number.
+  -Increment the global version number.
+  -Set the block version number to the global version number.
+ -Allocate consecutive region of words in a block
+  -Nothing special with the bias+interval mode. Needs special handling for efficiency in the bitmask mode.
+ -Free consecutive region of words in a block
+  -Same.
+ -Reallocate word
+  -Same as a deallocate followed by an allocate.
+  -Increment the global version number.
+  -Set the metadata entry's version number to the global version number.
+  -Set the block's version number to the global version number.
+ -Dereference pointer
+  -Make sure it isn't a dangling pointer
+  -Refresh the pointer
+  -Ready to use now
+ -Copy pointer
+  -Just copy it like data
+ -Compare pointers for equality
+  -You can't compare dangling pointers, so make sure they aren't.
+  -Compare the pointers only; the version numbers can be different.
+ -Compare pointers using less than
+  -Same; can't have dangling pointers.
+  -C lets you have a one-past-the-end pointer for arrays... You can also cast shit to an array...
+   -Arrays have range checking anyway
+
+Old: Alternative heap handling:
+ -Allocate linearly and, in the metadata, store whether it is a pointer or not (one bit).
+  -So, 1 bit per word. Deallocated memory is a pointer which equals some magic, randomly chosen number. So, 0xFFF...FF is a
+   bad choice because the programmer might use it for data and cause slow-downs. It must be unlikely to be used by the
+   programmer.
+ -No version numbers are used.
+ -When something is deallocated, replace its words with a magic number and set the data to be all pointers.
+ -When you dereference a pointer, check if the value equals the magic number. If so, check if the metadata says it's a pointer.
+  If so, it's dangling. Else it's not.
+ -Need to perform compaction every now and then when you run out of memory. The data about what is a pointer and what isn't
+  is used.
+ -Does not work very well for the stack; stack frames have to be dynamically allocated. Does not work for resizing vectors.
+
+Old: Stack memory, globals, registers:
+ -The registers are part of the current stack frame. Non-saved registers should not need any special handling.
+ -Globals act like stack variables in the frame before the main function's frame.
+ -A stack frame can construct a "safe" pointer to any of its local variables. A safe pointer does not need any dereference
+  checking, but it can become an unsafe pointer during assignment.
+ -Passing a safe pointer to a function or assigning it to part of the stack after the start of the frame containing the
+  pointed-to memory is safe.
+  -You can compare the pointer with the location on the stack that it's being written to to decide if it's safe, but it's
+   safe to assign a pointer to the memory before it on the stack as long as that memory belongs to the same frame as the
+   memory pointed to by the pointer.
+ -Assigning a safe pointer to dynamically allocated memory, or to a stack frame before the frame that it points to is
+  potentially unsafe.
+  -If all stack variables are word aligned, the stack can be considered a consecutive set of blocks with bias=0,interval=1
+  -The transformation between stack memory and the metadata is different because different regions are involved.
+   -If you have e.g. a 32 MB stack, you can put it right before the heap and it will require 1 MB of metadata.
+  -To convert the pointer to a safe pointer, you "allocate" memory on stack by changing the metadata associated with the
+   pointer. If it was already allocated, leave it alone. The version number is the global version number.
+  -When you return from a function, you have to deallocate any stack variables that were allocated. Usually there won't be
+   any. This can be done by scanning the metadata.
+ -In some cases, it is possible to statically determine that a pointer is safe and its version number won't matter. If not,
+  a version number of 0 means the pointer is safe.
+
+Old: Standard containers and arrays:
+ -Arrays:
+  -What we really want to know is when pointer arithmetic is safe. Also need to handle the 'one past the end' case.
+  -One way to do it is to have a 'barrier' that you can't iterate past. Also allocate an extra element for the one past
+   the end case.
+  -So, arrays are allocated on a word boundary, so the size of the array is rounded up to the next word. Each version number
+   also stores whether that entry is terminal or not. When you assign a version number to a pointer, you should leave
+   all of the metadata (bias, interval, is terminal) alone.
+  -There are two terminal bits: left and right.
+  -When you allocate memory, the first allocated word has the left terminal bit set, and the last (could be the same as the
+   first) has the right terminal bit set.
+  -
+  -Arrays are allocated on word boundaries.
+  -When you allocate an array, all of the words should have the same version number.
+  -Pointer arithmetic is ok as long as the version number does not change (except for the metadata parts)
+   -You have to increment the global version number after allocating an array for this to work.
+   -This requirement is too restrictive, and having word boundaries does not work that well with character arrays.
+  -To deal with character arrays, you can store the amount of padding at the end of each word in that word's version number.
+   -The padding is a number in bytes. That portion of the word is considered inaccessible. You still allocate by rounding up
+    to the next word. If the array's size is a multiple of the word size, allocate one extra word with padding = 0 for
+    the past-the-end pointer.
+  -The version number thing works well for fixed-size arrays but not for vectors.
+   -It also does not interact well with refreshing pointers.
+   -Can have two version numbers: a group version and a reallocation version.
+  -A pointer can be marked as "one past the end". There is no padding. Incrementing a pointer one past the end is legal, and
+   is detected if the group version check fails but it passes for the previous entry. For this to work, there should be
+   one extra unused block allocated from the OS for the heap, so that there is no segfault.
+ -
+ -Another approach: store the start and end of the memory region whenever there is a pointer. So, you allocate an array with
+  new, the resulting pointer has a start and end location, a current location, and a version number for the current location
+  only. If the current location equals the end location, the pointer is one-past-the-end and the version number should be
+  really high.
+
+Old: Safe casts:
+ -Can keep track of what's a pointer and what isn't. Not legal to cast pointers to values or vice versa.
+ -When you allocate memory, you have to specify whether it is a pointer or not
+ -Some casts are safe and produce known-safe pointers (e.g. int* -> float*). Some casts are potentially unsafe (e.g.
+  one struct without pointers to another struct that has a pointer) and may require group number checking or checking
+  the metadata to make sure pointers are not treated as data or vice versa.
+
+Better version:
+ -Be more restrictive about what is allowed
+  -You can have "unsafe" blocks, which should be extremely rare but is necessary e.g. to implement a vector. You need to
+   be aware of how the memory checking works in order to use unsafe blocks properly.
+ -More emphasis on performance; still want full safety at the expense of restrictions
+ -Heap
+  -What was described in "Old: Alternative heap handling"
+  -When you allocate memory, you have to specify what is a pointer and what is data. There is a special metadata region
+   for this. For 64 bit architectures, each 64 bytes allocated has 1 byte of metadata. Allocations must be word-aligned.
+  -For the stack, we need to be able to statically determine what is a pointer and what is data. This should be possible
+   since casts are restricted (i.e. you can't have a char array on the stack and cast it to a struct that has pointers).
+  -There is a magic value for unallocated memory (the metadata for unallocated memory is all pointers).
+  -When you sucessfully dereference a heap pointer, it is safe to dereference without any checking until the next time you
+   free memory. Allocating memory may cause compaction but the pointer will still be safe evne though its value changed.
+ -Stack
+  -Most references to stack memory are assumed to be safe (described above).
+  -Unsafe pointers use allocation and version numbers and whatnot. When you generate an unsafe pointer, use the existing one
+   if it's there.
+  -If you have an unsafe stack pointer, it is still one word and actually points to an unsafe stack metadata region which
+   contains the location on the stack, the version number, etc. These are sparse so use the bitmask approach instead of
+   the bias+interval approach. Also, you can allocate individual bytes instead of words.
+   -The first word is the magic value for unallocated memory. So, when you dereference a pointer that isn't statically known
+    to be safe, you check if the aligned word containing that pointer is the magic value, and use a special handler if so.
+    The special handler is slow. If not, you proceed.
+  -When you copy a safe stack pointer, you might make it unsafe. In contrast, heap pointers can be copied willy-nilly.
+  -The programmer should be able to check if their code uses unsafe stack pointers since this will slow it down. So they
+   get a compiler or runtime warning when an unsafe pointer is generated unless they marked that code as ok that's it's slow.
+  -When you return from a function, you might have to deallocate some stack pointers.
+  -Each pointer assignment is either safety-preserving or potentially unsafe. Function calls are safety-preserving. Assigning
+   a pointer to anywhere except the current stack frame is potentially unsafe.
+   -For potentially unsafe assignments, you have to figure out if the pointer is a safe stack pointer (generally known at
+    compile time, but only to the calling functions) and copy it if so.
+   -The only way to get a stack pointer is for a calling function to pass it (or an object containing it) to you.
+  -This probablys needs to be done on a scope level instead of a function level. When a scope ends, all variables in it
+   are deallocated.
+  -When you sucessfully dereference an unsafe stack pointer, it becomes a safe stack pointer until the scope it was dereferenced
+   in ends.
+ -Casting and pointer arithmetic
+  -All pointer arithmetic must use static offsets only. C-style arrays are banned.
+  -static_cast and reinterpret_cast are different because static_cast can cause the value of the pointer to change e.g. if you
+   cast a pointer to base class to a pointer to derived class.
+   -static_cast is potentially unsafe if the value of the pointer has to be changed, because it might then point to unallocated
+    memory. static_cast of base to derived class is implemented using dynamic_cast, so any classes that use static casts
+    must have virtual functions... could automatically add a dummy virtual function to classes that don't have any and are
+    involved in static casts that cause the pointer to potentially point to unallocated memory.
+   -If the class has padding, that is a 3rd type besides pointers and data. It is unallocated memory. You can cast pointers
+    or data to unallocated memory, but you can't cast unallocated memory to pointers/data.
+   -"A* a=static_cast<B*>(b)" is equivalent to "A* a=reinterpret_cast<A*>(reinterpret_cast<char*>(b)+k)" where k is a
+    static constant
+  -a cast of one pointer type to another is safe if the second pointed-to type is smaller or equal in size to the first, and:
+   -each byte of both types is (statically) classifed as part of a pointer or data
+   -the cast is only legal if for each byte, it is either part of a pointer in both types or part of data in both types. if
+    one type is smaller than the other, the check is only done up to the size of the smaller type
+    -should work even if pointers are not word aligned
+   -also, for each pair of pointers that are at the same locations in the two types, you have to be able to legally
+    reinterpret_cast the pointers to each other
+   -note: this is not symmetric if the sizes of the types are different
+   -also, if you use virtual inheritance or virtual functions, the vtable pointer needs to be accounted for. it cannot be
+    cast to anything other than a vtable pointer of a compatible (depends on how it's implemented) type or uninitialized memory
+  -a union is only legal if pointers to each of the types in the union can be legally casted to any of the other types using
+   reinterpret cast
+  -the only pointer arithmetic allowed is of the form "reinterpret_cast<A*>(reinterpret_cast<char*>(b)+k)" where b is an
+   instance of B*, A and B are arbitrary types, and k is a nonnegative static constant.
+   -This is only legal if k+sizeof(A)<=sizeof(B). If so, the above rules are followed to make sure pointers are not cast
+    to data. This basically the same as adding k bytes (unallocated memory; not data or pointers) of padding to the start of A
+    and doing the cast with k=0.
+ -Unallocated memory:
+  -Compiler will statically determine when you have potentially unallocated memory. If it finds any, it must be placed in
+   an unsafe block. It's impossible to know for sure if the unallocated memory would actually be read so the compiler may
+   complain (warning, not error) for correct code.
+ -Vectors:
+  -Use version numbers, etc, for iterators. Described above. Iterators are not pointers.
+  -A more general version of a vector is an allocation map. This is the same as a vector except you can deallocate and
+   reallocate entries in the middle of the map. Can be used to implement a vector, circular queue, etc.
+ -Stack overflow:
+  -There's a 'trap' block at the end of the stack which causes a segfault if it's read from.
+  -If you increment the stack pointer by more than the size of the trap block (e.g. you have a large array on the stack),
+   you need to verify that the stack has not overflowed into the heap or something
+
+Threads, safe:
+ -Each thread has a lock associated with it, which it has locked all the time while it's running.
+ -Each lock can own certain regions of memory
+ -Each lock is a reader/writer lock. An exclusive lock is a reader/writer lock that is never locked in read mode.
+  -Actually, to lock in write mode, you have to lock in read mode and then promote to write mode (second lock)
+ -If you have a lock in read mode, you can read its associated regions of memory only.
+ -If you have it in write mode, you can change which regions are assigned to that lock. This is required if you want to
+  deallocate those regions. You can also read or write to any owned region.
+ -To destroy a lock, you have to have it locked in write mode. I.e. a lock owns the memory it's contained in.
+ -When you create a lock, it can either be unlocked or locked to your thread in write mode. Doesn't matter. It won't own
+  any memory so it won't be very useful the way it is.
+ -If you change ownership of stack memory to a lock, you can't return from that stack frame without having the lock in write
+  mode.
+ -Memory access can be enforced using the CPU's TLB or with virtualization.
+
+Threads, reproducable:
+ -Whenever you acquire a lock, add your thread id to the lock's acquisition sequence. Thread ids can be reused.
+ -...
+
+Deadlock prevention:
+ -Want to do static code analysis to verify that code will not deadlock without having the programmer manually maintain an
+  ordering for their locks.
+ -...

@@ -1,0 +1,5 @@
+#!/bin/bash
+set -o pipefail
+scons 2>&1 | tee compile.log
+exit
+

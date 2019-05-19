@@ -1,0 +1,11 @@
+import gch
+#execfile('H:/Programming/scons_setup.py')
+#execfile('/home/Administrator/repo/scons_setup_cygwin.py')
+
+env.Append(CCFLAGS=' -O3', LIBS=['SDL2main', 'SDL2', 'boost_system', 'boost_thread', 'boost_filesystem', 'boost_regex']);
+gch.generate(env)
+
+env['precompiled_header']=File('include.h')
+env['Gch']=env.Gch(target='include.h.gch', source=env['precompiled_header'])
+
+env.Program(['ide.cpp', 'lz4.c'])

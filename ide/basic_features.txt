@@ -1,0 +1,407 @@
+-Basic text editing support
+ -UI except for text editor uses some gui toolkit such as QT or whatever
+ -Text editor uses completely custom per-pixel rendering including fonts. This has to be perfect.
+  -Only supports fixed-width fonts.
+  -Could possibly make my own font.
+  -Font size configurable; the text editor internally uses a grid.
+  -Cells can be bold or italic, and they can have a foreground and background color
+ -Save and load files like a normal text editor
+
+-Code panes
+ -80 characters wide
+ -Use line wrapping. Only the first 80 characters of a line longer than 80 characters is normally displayed
+  -If the line is selected or the cursor is on that line, the rest of the characters are displayed. A long line acts exactly
+   like multiple lines of code, except the lines after the first one are displayed in a different color and are hidden
+   when they aren't selected.
+   -So, going up to a long line would cause its last subline to be selected. The subline acts like a normal line except that
+    it isn't displayed sometimes.
+   -Sublines use the same level of indentation as the main line.
+   -Actually, indent the sublines after the first one by one indentation level.
+ -The same amount of whitespace is removed from the start of each visible line so that one of the visible lines does not
+  start with any whitespace.
+ -Cannot insert or display a tab character, any special ascii characters besides spaces or newlines, or any unicode
+  characters or extended ascii characters. Only windows line endings supported. Files are cleaned up to conform to these
+  standards at load time (i.e. tabs are converted to spaces).
+  -The indentation at the start of a line must be a multiple of 4 spaces. Internally, groups of 4 spaces are converted to
+   one tab and spaces are not used at the start of a line. However, the file is saved using spaces.
+  -Internally, linux line endings are used.
+ -Only insert mode is supported
+ -When user hovers mouse, a ghost of the text cursor is displayed to show where the user would select if they clicked.
+ -Line numbers are displayed; the number of digits is kept minimal.
+ -Any empty lines have all of their whitespace removed. Trailing whitespace is also removed.
+ -Empty lines are always treated like they have the same amount of leading whitespace as the previous line. This is done in
+  real time, so if the user changes the previous line, the empty line changes. This is not written to the file.
+ -The line the cursor is on is highlighted. If the mouse is hovering, the line it would select is also highlighted in a
+  different color.
+ -No antialiasing on anything.
+ -Cursor is a couple (even number) pixels wide, is in the middle of two cells, and has the height of one cell. It blinks;
+  while it is visible, the pixels under the cursor are negated.
+  -Whenver the cursor is moved (including during typing), the blinking is reset so that the cursor is visible.
+ -The scroll wheel will move the screen up and down instantly by a fixed number of lines.
+ -Double clicking on a token will select it.
+ -Dragging will select text. If a newline is selected, that entire line is highlighted.
+ -The cursor can go past the end of the line, or past the end of the file.
+ -Can also hold shift to select stuff. It acts like dragging, but it will not reset the current selection like clicking would.
+ -When you backspace or delete leading whitespace, it will delete 4 spaces at once (internally, one tab).
+ -You can select in the middle of tabs, but your cursor acts like it is at the end of the tab, so hitting backspace will
+  delete the entire tab and typing will put characters after the tab. However, delete will also delete the tab
+  and not what comes after it.
+ -The leading whitespace can be colored differently.
+ -If there are multiple tabs in the leading whitespace, they are treated like one tab except the backspace and delete will
+  reduce the tab count by one. So, internally, no leading spaces or tabs are stored; only the number of leading tabs is stored.
+ -Clicking on a line number will select that entire line. There is also a hotkey that does this.
+ -The newline is grouped with the leading whitespace, so selecting a newline implicitly selects the next line's leading
+  whitespace. Selecting any leading whitespace selects all of it and the previous newline, although the cursor can still be
+  somewhere in the middle.
+ -Holding ctrl and scrolling will scroll faster.
+ -You cannot drag a selection to move it; dragging will always create a new selection.
+ -Ideally cut, copy, and paste should have a single button dedicated to them.
+ -Holding ctrl and using the arrow keys will cause them to operate on multiple cells at once. For example, 3 lines up
+  and down and 5 characters left and right.
+ -The repeat rate and delay uses the system settings.
+ -When you copy a selection containing newlines, the leading whitespace is removed evenly so that at least one line has
+  no leading whitespace.
+ -Shift-insert does not paste. That is stupid. Only the keys described here do anything.
+ -Page up and page down should operate on half (or some fraction) of a page instead of an entire page.
+ -Home and end seek to the start and end of the current line. However, home seeks past leading whitespace.
+ -Adding spaces after leading whitespace works but they are converted to tabs after you move the cursor or do anything besides
+  adding spaces.
+  The number of tabs required is rounded up.
+ -When you paste into leading whitespace, it goes after the leading whitespace.
+ -The tab key indents the current line; it cannot add tabs to the middle of a line.
+ -Shift-tab unindents the selected lines.
+ -Home and end seek to the start and end of the current line. Ctrl-home and ctrl-end seek to the start and end of the current
+  object.
+ -When the amount of leading whitespace not viewed changes, the absolute cursor position does not change but the relative
+  cursor position changes (relative to the left side of the screen). If leading whitespace is not displayed, it is still
+  there. If you copy, the leading whitespace is actually removed.
+ -If you paste something with newlines, the leading whitespace for the line you're on is added to the leading whitespace
+  for each of the added lines.
+ -Unmatched brackets (including parenthesis and square brackets but not angle brackets), unterminated statements, etc,
+  cause the indentation level for the next line to increase by one. Terminating brackets or semicolons cause the level to
+  return.
+ -Deleting selection works like copying.
+ -Right clicking does special stuff like get info about symbol. Right not it is not implemented.
+ -Instead of a blinking cursor, can highlight the entire column that contains the cursor. The area between adjacent horizontal
+  cells is highlighted.
+ -The backspace and delete keys cannot control how much leading whitespace there is on a line. Only shift-tab will remove
+  leading whitespace. Backspace will remove the entire line and delete will remove the next non-whitespace character
+  after the leading whitespace.
+  -Instead of shift-tab, use caps lock, which is disabled for the editor (i.e. pressing it won't change the status of
+   the caps lock light).
+ -If you make a newline, the next line contains the same level of indentation as the previous line unless the previous line
+  has a character that changes the level of indentation. This is true even if you make a newline in the middle of a line;
+  the remainder of the line will be indented and go to the next line.
+ -The indentation at the start of a line wrapped line does not actually exist; if the cursor is there, it is treated as if
+  it was between the last character of the previous wrapped line and the next character of this wrapped line. However, pressing
+  enter here will cause the indentation level of the current line to remain the same even if this causes it to be indented
+  relative to the previous line.
+ -To search, you hit ctrl-f which creates a command region. This is highlighted differently.
+  -If you are selecting any text, this text will be in the command region by default and it will be selected. Otherwise,
+   the command region is empty by default.
+  -The command region's background is colored differently and typing into it moves the adjacent background text out of
+   the way as if the command region is just normal text.
+  -Characters horizontally adjacent to the command region's text are also part of the command region, to prevent the
+   user from confusing editor text with the command region.
+  -There can only be one active command region at a time.
+  -Escape deletes the currently active command region.
+  -If your cursor is inside of the command region, it will edit the command. If it is outside, it will perform normal
+   editing operations.
+  -Home and end operate on the command region only when the cursor is inside of the command region.
+  -Hitting ctrl-f again will remove the last command region, as if escape was hit first.
+  -If the command region is line wrapped, it will be moved so that it starts on the next line. If it is very long, it may
+   still get wrapped.
+  -Pressing enter or f3 while the cursor is in the command region will cause the search to be executed; the next result
+   after the cursor is highlighted.
+  -Pressing enter outside of the command region acts like a newline.
+  -Pressing f3 outside of the command window leaves it alone but does a search for the previous query string.
+  -The basic search ignores case and whitespace. that should be the only option for now.
+ -The scroll bar cannot be dragged; clicking on the bar will instantly move it. Not all panes have scroll bars.
+  -The scroll bar's size depends on the current view window size relative to the object being viewed. For the read/write
+   panes, there is no main object so there is no scroll bar.
+  -The scroll bar has no scroll up/scroll down buttons.
+  -Clicking/dragging will center the bar at the mouse. There is no difference between clicking on the bar and clicking on
+   the background that has the bar.
+ -With my dev-cpp font size, a pane should be 595 pixels wide. The title bar and task bar are 45 pixels tall total. One
+  line of code is 15px tall. (595 pixels = 80 code columns, 4 line number columns, 1 scroll bar column)
+ -So:
+  -1280x1024: 2 panes, 90 horizonal pixels left; 65 lines per pane	-> 130 lines total
+  -1920x1080: 3 panes, 135 horizontal pixels left; 69 lines per pane	-> 207 lines total, but 3 panes
+  -1080x1920: 1 pane, 485 horizontal pixels left; 125 lines per pane	-> 125 lines total, but 1 pane
+	if using 2 panes, 540 pixels per pane. Can get rid of
+      	line numbers since they don't really do anything.
+	End up with 76 characters per line instead of 80.
+  -1080x1920: 2 panes, 0 horizontal pixels left; 125 lines per pane	-> 250 lines total, but narrow panes
+  -1200x1920: 2 panes, 10 horizontal pixels left; 125 lines per pane	-> 250 lines total
+  -Right now with dev-cpp: 						->  56 lines total
+  -Should be able to see about 4x as much code.
+ -There should be a keybind to select the token under the cursor.
+
+-Language-specific keyboard
+ -Can pull up an image of the keyboard which shows which keys correspond to which actions. Could possibly have this show
+  the state of each key (up, down, pressed, released). Already have an image of the keyboard in the game.
+  -If you hold a modifier key, the text on the keyboard's buttons changes. For example, holding "ctrl" causes "find" to
+   be displayed on the f key. The key's label on the keyboard is also displayed (like in the game).
+  -This doesn't need to be implemented for the first version.
+ -Goal is to avoid use of the shift key, and to make one-handed operation easier.
+ -Includes special buttons for cut, copy, paste, find, undo, redo
+
+-Syntax highlighting using a configurable tokenizer; should support C++. Already wrote a tokenizer for PNO.
+
+-Multi-monitor support
+ -One monitor is the input monitor, the other is the information monitor which mostly does not support user mouse input
+ -The input monitor can have up to two vertical code panes. The information monitor can have any number of panes but
+  they cannot be interacted with in any way.
+ -Obviously need to buy a second monitor.
+ -The information monitor has larger font sizes than the input monitor.
+ -I guess you can sometimes interact with the info monitor, but it is mostly for information.
+ -The initial version does not really have any useful information on the second monitor.
+
+-Objects, views, history, exporting: back-end
+ -Summary:
+  -Object contain code or references entire versions of other objects. Cannot have cycles.
+   -You can have multiple references to the same object.
+  -Any edits will be saved immediately to disk in a redo-only log record. Checkpoints consisting of the state of all of the
+   objects are also saved periodically, after there are enough deltas. There can be data (text) or metadata changes.
+   -Metadata is relationships between objects, between an object and a file, and the contents of views.
+  -By default, an object is not associated with anything and doesn't have a name.
+  -An object can be associated with a file under the export root directory. The IDE will constantly sync that file so that
+   it represents the current state of the object. The file should be marked read-only to prevent other application from changing
+   it. The expected hash of the file is stored so that it is not overwritten if the contents changed unexpectedly. The user
+   has to manually delete the file if this happens; the IDE will recreate it.
+  -When you disassociate an object with a file, the IDE will make sure the hash is the expected value and then delete the file.
+   If the hash differs, it will not delete the file but it will still disassociate the object.
+  -The IDE will tell you the status of the export directory:
+   -Sync failed. Will explain what files need to be deleted, and any extraneous files.
+   -In sync, has extraneous files. Will list the extraneous files.
+   -In sync, no extraneous files.
+  -You can tell the IDE which extraneous files are expected. This can use regexes. You can't have an object which is also 
+   considered extraneous.
+  -In the future there could be a bidirectional sync with the IDE detecting changes to the export directory.
+  -Each reference to an object or view has a unique identifier; the refereced object/view also has an identifier. This is
+   necessary to handle multiple references to the same object.
+  -A view can only contain references to objects and other views. These are ordered. No cycles.
+   -Views can modify their referenced objects/views.
+   -To do this, first a path of reference unique identifiers is specified to determine which reference should be modified.
+    -If any of the references cannot be followed, the modification is deleted from that version of the view.
+   -Views cannot contain references to other views, unless there is a good use case for this.
+   -The modification type is one of the following:
+    -Hide; removed from view although there is an indication to the user 
+    -Insert a different object before or after
+  -One type of object is a marker, which is just an empty object. It can be used to allow a view to insert an object in the
+   middle of the text of another object.
+  -When an object or view references another object, the version referenced is stored. Note: cycles are banned even if the
+   versions are different.
+  -History is tracked for individual views and objects. There is also a global object that tracks the current versions of
+   each view and object, and its history is tracked. Some views do not have multiple versions, so history is not tracked for
+   them, there is no undo/redo for them, and they are not stored in the global object.
+   -Those views are still written to disk periodically and during clean shutdown. They are written using ping-ponging so that
+    if there is a crash during a write, the 
+  -Unclean shutdown is detected and causes a full sync of the export directory. During clean shutdown, the export directory
+   should match the current state of the code.
+  -Writes to the export directory might be batched so that they only happen e.g. every 500 ms. There is a way to force
+   an export.
+  -The user is assumed not to fuck around with the export directory so there is only a check for that before overwriting
+   stuff. If the user has fucked with the export directory, they can force a full sync.
+  -The creation time of each delta is stored.
+  -Pasting has a special delta type associated with it if you are pasting code that was copied in the IDE. If you paste in
+   external code, that is considered the same as typing text.
+  -One delta corresponds to one token being add or removed (e.g. >= is one token even though > is also one token).
+  -The object history graph is a tree. Each delta has a parent delta. In the future it should be possible to view side-by-side
+   deltas and merge or rebase stuff but this will not be implemented yet.
+  -When you first create a project, you can import a folder and use it as the export folder from then on. The initial objects
+   are read from the folder.
+  -A project has an export folder and some IDE-specific data: log (split into multiple files which start with a checkpoint),
+   unclean shutdown file (exists while IDE is running, deleted during shutdown), non-historic state A and B files. when
+   non-historic state is saved, it is written to non-current A or B file along with the timestamp. the current one is the
+   one with the largest timestamp.
+   -IDE will lock the unclean shutdown file while it is running to prevent other instances from running on the same project.
+    other instances will refuse to load a project if they can't write to the unclean shutdown file if it exists. everything
+    is fine if it doesn't exist.
+  -Multi-project editing not supported currently. Also, you need to initialize a project before you can do anything, although
+   this consists of just specifying the export directory and the IDE will make a folder there to shove its data. You can
+   also specify which files should be imported and which ones shouldn't.
+  -Each object is assiged a unique version number which is changed when the object is changed. The version number is also a
+   timestamp.
+   -All references to an object include the version referenced.
+   -However, the version that's actaully used is determined by looking up the version referenced and following the primary
+    children to find the latest version. There may not be any primary children, in which case that version is the most
+    recent even if there are non-primary children. There cannot be more than one primary child for a given version.
+   -For example (primary children are in brackets):
+    -You create edits A, B, C
+     -A -> [B] -> [C]
+    -You undo C (C is still there, it is no longer primary)
+     -A -> [B] -> C
+    -You create edit D
+     -A -> [B] -> [D]
+               ->  C
+    -You can't redo C but it's still there.
+   -For now only top-object-level undo/redo is supported. To undo, you find the parent of the most recent version and mark that
+    version as non-primary. To redo, you look at the children of the most recent version (so, it has no primary children)
+    and mark the newest child as primary. Alternatively, you can maintain a redo stack to decide which versions should be
+    marked primary during redo, although it ought to be the newest ones.
+
+-Auto generation of objects:
+ -It would get tedious to have to manually specify where the objects are.
+	<-- empty lines followed by comments
+	stuff that doesn't have semicolon or start bracket {
+		stuff in brackets
+	} stuff on the same line up to the next start bracket
+ -Objects marked using [ and ]:
+	[
+		comments or empty lines
+		[first stuff]
+		[ {
+			second stuff
+		} third stuff]
+	]
+ -The tokenizer will detect blocks. Stuff inside of a (, <, or [ block is not considered when creating objects.
+ -These rules are really only meant to be used for class and function blocks; they might not work too well for other
+  stuff.
+ -The user shouldn't care about what objects are inside of an object.
+ -The user can directly control which objects make up a view.
+ -Full list of rules:
+  -The tokenizer exports a list of statements for each block. Statements either end with a semicolon or a end curly brace.
+   -The last non-whitespace stuff (if any) in a block is also a statement.
+  -For each statement that has a curly brace, we start by having the part before the curly brace be one object and the
+   block with the curly brace be the first part of the second object. To handle C++'s semicolons after class definitions,
+   the statement after the end curly brace is included in the second object if and only if it is on the same line as the
+   end curly brace and ends with a semicolon instead of a brace. This should work for most non-stupid code.
+   -Also look before the first statement for comments, and then for empty lines. Do not include any comments once the
+    first empty line has been encountered.
+ -These are non-aliasing objects; each object has exactly one parent that's an object
+ -For now, there could be two types of objects: non-aliasing (one object parent), top level (no object parents).
+  -If one object has two object parents, it needs to be displayed in a special way to the user, so just ban it for now.
+   -Note: actually this is required to get copy and paste to work well.
+ -All top objects are user-defined objects. The user controls user-defined objects, and the tokenizer (later, language-specific
+  support) controls non-user-defined objects.
+ -For now, it should suffice that the only user-defined objects are top objects corresponding to files. The rest of the objects
+  are non-user-defined.
+
+-Code pane displaying a single object or view:
+ -Markers (empty objects) are not displayed
+  -Note: Creating a marker should not actually change the object.
+ -A view is treated the same as an object after its modifications are applied to its referenced objects
+ -Each object is stored so that at least one line has no leading whitespace. When it is inserted into another object, the
+  amount of whitespace at the insertion point is added to the object's leading whitespace.
+ -Each code pane displays a view. The view could be just a single object.
+ -If the view is a list of unmodified (by the view) objects:
+  -Display each object as a bunch of text without telling the user about the subobjects.
+  -The user can create, delete, and move subobjects while they're writing code
+  -There shouldn't really be any problems until the user uses copy and paste...
+   -There are two types of copying: alias or duplicate
+   -If the user does a duplicate copy, they are just copying plain text
+   -If the user does an alias copy, markers will be placed at the start and end of the copy operation, and a view is created
+    from those objects. The view is stored on the clipboard.
+   -When the user pastes aliased text, the contents of the view stored on the clipboard are inserted at the current position
+    in the current object. The clipboard view does not have any modifications.
+    -This will probably cause aliasing. When the user attempts to edit any aliased objects, they should clearly be able to
+     see that the object is aliased (e.g. by outlining it when the user's cursor is inside of it).
+    -The user can unalias a selection or the object under the cursor. This can cause the outlined object to change, if there
+     is an aliased object inside of another aliased object.
+    -The user cannot usually edit aliased objects. Instead, changing the aliased object will cause a new object to be allocated.
+     -In this case, it is not necessary to tell the user whether an object is even aliased or not, since it won't matter.
+  -If you paste an object inside of itself, a copy is made to prevent cycles.
+  -Copy and paste uses aliasing (except to correct cycles; even then it will alias most of the time).
+  -The tokenizer is used to calculate what objects should exist. This is combined with data about which objects presently
+   exist to determine if objects were changed, added, or removed.
+   -The user makes an edit.
+   -The tokenizer maintains metadata for a top object so that it can associated generated (non-user-defined) objects with
+    tokens, and can map text positions to tokens.
+   -For aliased objects, each reference to the object can be tokenized differently. This should be a transient condition while
+    the user is editing code. The tokens are stored with that reference.
+   -The edit causes certain tokens to be changed. Since blocks are tracked, inserting a block opening token causes the
+    following tokens to belong to that block, so they are also changed. Tokens may also be added or deleted.
+   -The rules for generated objects are applied to the changed tokens. These rules are localized.
+   -The changed tokens span a consecutive region of tokens (blocks are counted as one token).
+   -These tokens are iterated to refresh the generated objects. Nested blocks are also iterated.
+   -There is a stack of generated objects to handle nested generated objects. The stack is initialized using the objects
+    associated with the previous unchanged tokens.
+   -When a generated object is created, 
+   -...this is fucked.
+ -So, aliased object handling:
+  -Do not tell the user about subobjects at all unless they ask.
+  -If the user edits an aliased object, unalias it first by creating a new object. If the user edits a non-aliased object,
+   use that version of it so that views will see the new version.
+ -In the future e.g. each use of a variable could be a reference to an object so that the variable's name can be changed easily.
+  This requires language-level support so fuck it for now.
+ -Views can't be nested, so when the user does object-level operations, they are normally changing the view bound to the code
+  pane they are working with.
+ -So, there is:
+  -Text, which can be put into user objects
+   -User objects can be nested, cannot have cycles, but can have aliasing
+   -Top user objects (only) can optionally be associated with files
+  -Tokens, generated by a tokenizer. The tokenizer only operates on top objects, even if the user is editing a nested object.
+   -So, each view only contains references to top objects, and it uses object removal commands to limit the range being edited.
+  -Generated objects
+ -The tokenizer should just be an implementation detail
+ -The user can edit generated objects. There is an ambiguity if they make an edit at the start or end of a nested object;
+  this is just put in the innermost generated object for simplicity.
+ -If the user copies and pastes, this causes markers to be added and for object references to be copied
+  -Conceptually, a marker is the same as a position in an object which is tracked while the object is changed. It can
+   be implemented in various ways; probably by just specifying the version and the text position of the marker, which causes
+   it to be treated like an invisible character.
+  -Adding/removing markers does not modify the object containing the marker for the purposes of history tracking.
+  -The marker does split an object, so that there could be a reference to the portion of the object after the marker only.
+ -Top objects can contain references to other user objects. For now, these are all transparent references, meaning that any
+  modification to the object
+ -When the user adds a character to the start or end of a transparently referenced object, there is ambiguity about whether
+  it should go inside the object or outside of it. It will always go in the innermost possible object.
+ -When the user modifies a transparently referenced, aliased object, a copy is made so that the other references are not
+  modified. Alternatively, the modification is non-primary; this is probably better since it tracks the parent of the
+  modification better. Since it is non-primary, the aliased parent objects also have to be modified (also non-primary) to
+  update their reference version number to the non-primary modification. A non-primary delta can still have primary deltas as
+  children.
+ -There is no notion of deleting an object; you can only delete all references to an object.
+ -Top objects must be explicitly marked as such.
+  -You can iterate all top objects, but this excludes objects with no references that are marked as top objects. You can't
+   create a reference from an object to a top object; the contents of the top object are copied instead.
+ -So, at this point there is no mention of generated object, but the user can still create and nest user objects by
+  using copy and paste.
+ -Actual object handling:
+  -The tokenizer runs on a top object and generates generated objects which reproduce the top object.
+  -Each object reference in the top object (including nested references) has a range of characters associated with it.
+  -If a generated object is fully contained in a user object, it should go inside of that user object.
+  -Otherwise, a generated object might partially overlap a user object.
+   -If the user object is fully contained within the generated object, it should go inside of the generated object.
+   -If a generated object and user object partially intersect, one of them is going to have to be changed.
+    -There are no non-transparent references to user objects yet, so the user isn't going to notice if a user object is changed.
+    -An object can be partitioned. This creates one new object per partition, and it creates a new version of the object that
+     is the same as the old version except that it references the partitions and has no text associated with it. This can
+     be used to create markers. Partitioning can be tricky if the object has subobjects; some of those may also get partitioned.
+    -Partitioning does not save any text data in the log; only the places to split the parent object are saved along with the
+     ids of the generated objects.
+    -Partitioning does not create an undo entry.
+    -The user object is partitioned.
+  -If there are aliased user objects, each reference to the aliased objects might have incompatible sets of generated objects.
+   -In that case, the objects can't be aliased any more, so this will create a primary version of the object for the
+    first set of generated objects and non-primary versions for the other incompatible sets, although the generated objects
+    are compared so that identical ones are aliased.
+  -There's not really any difference between a generated object and a user transparent object.
+  -This process can be repeated
+   -Generated object are treated like user objects then. Actually, the generator will figure out which generated objects
+    need to be changed and which ones don't
+   -After running this process on the changed objects, they will become nested in a generated object. Those objects are
+    first turned into user objects (recursively).
+  -Removing redundancy:
+   -If a generated object contains a single transparent user object, the two are merged together so that they have the
+    same id and version number, and all references are updated ot use the new merged version (which is a generated object)
+   -Transparent user objects that only have one reference can be flattened into the parent (they have to have a neighbor
+    that also only has one reference).
+    -Note: transparent user objects can be referenced from views, which prevents them from being flattened.
+    -If all transparent user objects only had one reference, this would cause them to be flattened into their parent generated
+     objects.
+  -The object generator:
+   -Assumes all top objects are using global scope
+   -Can determine whether something is a namespace, class definition, function definition, function declaration, or something
+    else
+    -Can determine the name of any of those things (except "something else"
+    -To do this, it uses basic rules which work most of the time
+     -Assume the tokenizer pairs start and end blocks but this pairing is optional
+     -...
+   -In the future this would probably use a C++ compiler to generate an AST
+    -There really isn't a point in having the object generator without a full AST...
+ -Assuming from now on that there is a C++ AST generator, the IDE only works with C++ code, but there is no build system
+  integration
+  -Could probably also get it to work with C# with minimal effort as long as there is an AST generator available
+ -

@@ -1,0 +1,97 @@
+Implementation order:
+ -Basic UI, text editor
+ -Views and text objects
+ -Hierarchial display of objects, list of recently accessed objects
+ -Read and write views
+ -Text search:
+  -Select subset of objects
+  -Options: case insenstive, ignore whitespace
+  -Search cannot span objects; will only find objects that directly contain the text
+ -Associate files with objects
+ -Syntax highlighting using user-defined grammars
+ -History, including snapshots. Can export snapshot to directory as files; can import modifications to that directory.
+  -Directories are views, files are objects.
+  -Search integration:
+   -can select objects from history, can use snapshots to help select objects
+   -in text mode, can do a deletion search or an insertion search.
+  -Difference view including editor. Any number of objects selected for diffs.
+  -Selective redo. (will display difference view with the two original versions and the output; output can be edited).
+   -Conservative (preserve as much input as possible), but will merge anything automatically.
+  -Can have multiple concurrent exports.
+  -Object-level history view.
+  -Snapshot-level history view. A snapshot is a list of all the active objects, including their versions.
+  -Versions of objects or snapshots can be tagged. There is a "tip" tag for the latest version of each object, by date.
+  -You can seek history at the object or snapshot level. You can also do it using the tree view or using a linear bar input
+   to specify the end date.
+  -Objects that are not part of the "tip" snapshot will be greyed out. Changing an object will automatically make a child of
+   its head parent snapshots which have the updated version of the object.
+  -For an object, can see how old each line is using a color, and go to the last revision where that line was changed.
+ -Lists:
+  -Hierachial tree of text strings. Strings are ordered and have no keys. Strings may have key-value pairs associated with
+   them. One such pair is the icon, which can be "note", "todo", "done", "won't do", "error", "warning", "info", etc.
+   -Another pair is whether it was "read" or not, in the case of compiler errors. All errors start off unread and become
+    read when the user clicks on them.
+   -Another is the line and column number, object, and version. Used for compiler errors.
+ -Language integration:
+  -Language independent API, language-specific bindings
+  -Can make builds involving multiple languages
+  -You don't need to create a project or save anything to start writing code; IDE will figure it out.
+   -So, you can immediately start writing and running code after opening the IDE without pressing any other buttons.
+    You do not have to make a new file or anything, since you just write in the write view which is always there.
+  -C++:
+   -No files. No declarations, include statements, or using statements.
+   -An object is a class or function definition. Each object has a declaration and a definition. Some objects
+    only have declarations (classes).
+   -Can have two global symbols with the same name as long as they are disambiguated and a single build does not
+    contain both of them.
+   -Since there are no using statements, you may need to disambiguate symbols if the IDE cannot figure out which
+    one you want. It will display a list of possible symbols along with their global name and where it was declared
+    (in the case of conflicting global names).
+   -Compilation/linking:
+    -Only input is a list of functions and an output type (exe or dll). For exes, the only function specified should
+     be the main function; build system will figure out everything else.
+    -Each build is associated with a snapshot. Each build output (exe or dll) stores its associated snapshot in the
+     binary so that the exact source code for that output can be pulled up.
+    -Outputs are language specific but the same build can contain multiple outputs of different languages. The build
+     process for outputs of different langauages are independent, but if they use the same language, the build is
+     dependent.
+    -Will store recent builds and find all objects that changed between a build, rebuild only those using one compilation
+     unit per core and automatically generated precompiled header files, and patch up the old object files so that
+     they reference the new objects. Does not work with inlining (need to rebuild everything in that case, but can
+     still use one compilation unit per core and precompiled header files).
+     -The precompiled header file cannot be patched, so it should only contain "cold" objects that are not expected to
+      be modified.
+    -There is no notion of an external library; all libraries are imported into the project and may be changed if desired.
+     -The only exception are system dll files. Even then, a checksum could probably be taken.
+    -Can do ahead-of-time compilation if the user changes a function, stops changing it, and does not compile anything yet.
+     That function could be compiled immediately.
+    -Could do a distributed, low-latency build over many servers. Each server is used to make a small part of the same build
+     for low latency builds. Servers could be desktop machines that are doing other stuff (similar to folding@home).
+    -Error messages are shoved in a list.
+    -The inputs to the compiler/linker should come from ram, not disk. For the compiler, the source files should be cached
+     in memory in advance of compilation. The compiler outputs are stored in ram and passed to the linker. Any intermediate
+     linker outputs are also stored in ram. The final outputted program could be stored in ram also, but it needs to be
+     runnable. The intermediate and final outputs are eventually written to disk so they can be reused later, but this
+     does not block compilation.
+   -Debugging:
+    -You can debug an old version of the executible; the old source code will automatically be displayed.
+    -There are multiple methods of debugging. Can not support all of them.
+    -...
+   -Contextual search:
+    -This is a generalized version of intellisense (autocomplete)
+    -Can generate an AST for an object. ASTs for old versions of objects are cached.
+    -For code that compiles, the AST should be able to reproduce the exact text including whitespace.
+     -The AST can also map character positions to AST nodes and vice versa.
+    -AST nodes can map to objects. This is a form of metadata associated with nodes.
+    -...
+ -Integration with google, stack overflow, library help, comment-based help:
+  -Unified search
+  -Given a library help file, associate it with the objects from that library
+  -Associate comments with objects
+  -Given an object, decide if information about it can be found on the internet or not (i.e. is it an external library that
+   someone other than you wrote?).
+  -Search integration with results lists. Results lists can come from internet websites.
+  -...
+ -Basic integration with design documents:
+  -Can be stored as a list or an external document
+  -External documents can be associated with objects

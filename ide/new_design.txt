@@ -1,0 +1,460 @@
+todo:
+-for search results, list results in current file first, then other files
+-if an identifier only has one instance, then that instance should be highlighted
+ -i.e. if you only have one instance of an identifier, then you probably made a typo so the identifier should be highlighted
+ -this will generate false positives for library functions that are only called once...
+-for the f4 mode, display search results for whatever is under cursor instead of just displaying keywords
+
+-no file lock on the log file; possible to run two instances of the ide in the same working directory which is bad
+-need to add a log rollback mode in case of corruption
+ -this will output a new truncated version of the log
+-really need line wrapping to work
+-not parsed correctly: bar("foo")
+-pressing f5, etc should not change the left panel
+-leading indentation is not removed from analysis output
+-ctrl-s does not work properly; asks if it's ok to overwrite stuff even if it is safe to do so (file_manager.cs)
+-goto command should center the line; same with analysis
+ -won't center it if it is currently visible. otherwise, will be centered
+-make the right info bar take up 2 lines. the filename should be on the first line and everything else on the
+ second line. right now it is too long.
+-parser error: */ does not work if it is at the start of a line or if there is one character and then */
+-if backspace key is used to delete newline, it will go to the end of the previous line. this is wrong if there
+ is stuff on the current line that was appended to the previous line
+-pasting a closing bracket should not change the line indentation
+-using backspace at column 1 line 1 should not move the cursor to the end of the line
+-for analysis, increase limit for how many log entries are looked at. also, add a delay for how often analysis is
+ done to avoid doing it too frequently
+-parser: the minus sign in -1 is treated as part of the number; this is wrong. it should be an operator
+-if you use backspace on an empty line and the cursor is past the end of the line, it should unindent the line
+ but it will delete a single space instead
+-parser: "auto" should be a keyword
+-clicking on stuff in the analytics pane does not always select the right lines
+ -if it's already selected, it might not work. clicking should always select stuff
+-parser: c quote not detected in "}/*"
+-using shift-click should not change the window scroll position
+-if you use the delete key on the 5th space of 5 spaces at the start of a non-empty line, it will move the
+ cursor back once
+-if you're in single pane mode, pressing any button that changes the right pane (e.g. f5-f8) should disable
+ single pane mode
+-adding a closing bracket to a line that isn't indented moves the cursor back 4 characters
+-the "file" command fails if there are trailing spaces on the command line (which are invisible to the user),
+ since it includes the trailing spaces in the search
+ -get rid of all trailing spaces for commands
+-autosearch doesn't work if the identifier has capital letters in it
+-copying a file and renaming it while keeping the old file around and then doing an import causes the move to be detected instead
+ of making a new file; move should make sure the old file doesn't exist anymore before being detected
+
+-double clicking should select the token under the cursor or move the cursor to the end of the line
+-add commands: ctrl-f3: next file, ctrl-shift-f3: previous file. should work for analysis pane if it is selected
+ -will iterate through the results and select the first one that is in a different file from the current result
+ -to implement this, each result is marked as top-level or not. these iterate the top-level results
+-can possibly make the ide faster during paste or indent many selected lines by using an insert buffer to avoid cached
+ lines being recalculated redundantly
+-get files to be associated with the ide by doing this:
+ -when starting the ide, you need to pass a special flag to actually start it at a given working directory
+ -it will create a file called "ipc_file" in the data directory. the file is truncated if it already exists
+ -if there is an argument but the flag is absent, it will look in the parent directories for an ide_data
+  directory that has a file called ipc_file in it. it will loop and repeatedly try to lock the file for writing,
+  append the path to the end of the file (or at the first null character if there is one), and exit
+ -the ide will periodically open the file for writing, replace the contents with nulls, and process the contents
+ -the contents of the file are just commands that are executed on the command line
+ -for now, associate with all unity files
+-segfault in sdl if i start might and magic 7. can't get a backtrace because of course not
+-if the user moves the cursor repeatedly with the keyboard, only generate a view log entry for the last keyboard
+ movement before the user does something else (e.g. holding down the left key will only generate a view
+ log entry when the user lets go of the mouse and presses a different button)
+ -actually, just have the move command be generated once on keyup instead of repeatedly on keydown
+ -note: this will shit up the identifier coloring based on how recently it was viewed. also, processing more log entries
+  will make this problem go away and this does nothing about how writing a bunch of code shits up the analysis because of
+  the log entry limit
+
+
+
+
+
+
+
+
+
+
+
+
+done:
+-right pane views:
+ -f2: compiler log
+ -consider moving right pane a little to the right to make left pane bigger
+-search all files or current file for text
+ -no wildcards
+ -uses a token-based search
+ -ignores whitespace (although it is used to separate tokens)
+ -if the first or last token do not begin or end with whitespace, they will be a partial match. otherwise, a full match is required
+  -for a partial match, the token types still have to be the same
+ -result can span multiple lines
+-parse error messages and display them in the right pane (will stat a file called compile.log every 100ms to see if
+ it changed)
+-add a single save command (hotkey ctrl-s) whose output is in the right pane. will sync and export memory -> disk.
+ -need to press ctrl-alt-s to resolve conflicts in favor of memory
+ -to deal with unity's bullshit, also add an alt-s command which persists but does not sync
+ -don't use function keys for saving
+ -to import disk->memory, use ctrl-i for preview and ctrl-alt-i to import
+
+ -f1: command output (including find results)
+
+ -note: the right pane consists of a sequence of messages. each message can take up multiple lines and has an
+  event that happens if it is clicked on. there should be an indicator of what the current message is and buttons
+  to go to the next or previous message. f3 is used to go to the next result and shift-f3 goes to previous result
+  panes are always read top to bottom (so seek to the top when it changes instead of the bottom, and reverse the
+  order of the analysis results)
+  -analysis: moves cursor to target file and line:column
+  -find file: moves cursor to start of target file, unless it is already in the left pane
+  -find text: selects result
+
+ -when displaying blocks of code in right pane, get rid of any indentation that is common to all of the lines and
+  also copy syntax highlighting data from the source
+
+ -f5: analysis: view or edit, lines
+  -calculate blocks using some criteria and sort the blocks either by last view time or last edit time. no need to
+   do anything fancy. get rid of current implementation that uses weights
+  -to calculate a block, just select 3 lines on each side of the outputted line. merge overlapping blocks together
+   only if last modified times are similar; choose most recent time for merged block.
+ -f6: analysis: edit only, lines
+ -f7: analysis: view or edit, files (sorts by last edit time)
+ -f8: analysis: edit only, files (sorts by last edit time)
+
+-hotkeys for commonly used commands. if the command takes input, the command bar is selected to allow the user
+ to type the input in. if not, it is just executed without using the command bar
+
+-button to toggle between left editor only or side by side view (f9)
+ -useful for editing long lines
+
+
+
+
+
+
+
+-don't need yet:
+ -not going to have undo/redo yet since it's tricky to implement
+  -can close the editor and re-open it to undo stuff. can also roll back the log by ignoring the last 'n' log
+   entries
+ -not going to implement line wrapping since a left editor only mode should be sufficient for now
+ -eventually need a file to open in the ide if it is double clicked on. for now, don't associate code files with the
+  ide
+ -select all feature
+ -collapse all functions that aren't selected. only collapses functions
+ -can have shift-f5 be view only analysis, which explicitly excludes recently edited lines even if they were viewed
+  -same with files and shift-f7
+ -color code identifiers based on how recently they were viewed or edited (by changing fg color)
+ -color code find results even if they are not the current result (changes bg color)
+ -reopening the editor should put the most recently viewed file in the left pane (same with right pane)
+ -add compile command which executes a batch file and reloads compile.log (hotkey f4)
+  -both of these files are in the project root directory
+
+
+
+
+-Will use some gui library for everything except the text input windows
+-The text input windows use a custom cpu-side renderer
+-Language-agnostic except for syntax highlighting, auto-indent, etc. Those features should be easy to implement for any language
+ -Will support c++ and c# for syntax highlighting and auto-indent. The only difference between those languages is the set of
+  keywords
+-Has two panes side by side. Each pane takes up the entire height of the monitor. The rest of the ui is vertical and is located
+ on the right after the two panes. There is no toolbar or menu bar to maximize vertical space for the panes.
+-To edit anything, you need a project file which has some configuration data. Also, any code file in the project file's directory
+ or any subdirectories is part of the project. Each project file can have one or more workspace files. A workspace file defines
+ the editor state (history, current view, etc).
+-All of the source files for a project are loaded into ram and indexed when the project is opened.
+-All editor operations (saving, undo) apply to the project as a whole and not to individual files. Saving the project will save
+ all of the modified files.
+-To make starting the editor faster, all of the source files can be combined into a single file (which consists of blocks that
+ can be allocated and freed). The single file is loaded into ram when the editor starts and saving operations only apply to
+ the single file. There are also operations to write the contents of the single file to the separate files. Either only the
+ dirty files can be updated, or all of the files can be updated.
+ -100k lines of code is like 4MB, so the single file can just be written in a single batch whenever the user saves. It takes
+  like 100ms to write that much data sequentially. If I really give a shit, I can figure out which blocks are dirty and sort
+  them, then write to only those blocks in sorted order, but it probably won't matter.
+-There are various views which define what content is displayed in the two panes
+
+-Can do some basic parsing of the code which works for both c++ and c#
+ -Using a compiler to parse the code is kind of error prone since the code might not compile. A custom parser will be more
+  robust
+ -There are global, class, and function scopes
+ -The parser will only work on code that is indented properly, since this allows the code to be parsed while it is still being
+  written
+  -Each line can open or close a certain number of scopes. This is calculated by finding the number of '{' symbols on the line
+   and subtracting the number of '}' symbols. This is the bracket scope delta. If this number is less than -1 or greater than
+   1, it is truncated to -1 or 1.
+  -For any two adjacent lines, the tab scope delta is the indentation level of the second line minus that that of the first line.
+   This is also truncated.
+  -The start of a class or function is identified by parsing each line. A class is anything that has the class or struct keyword
+   outside of angle brackets and is located in global scope. The name of the class is whatever is after the class or struct
+   keyword.
+   -A function is anything located in class or global scope that consists of a type name, a function name, parenthesis, and then
+    curly brackets. There cannot be any semicolons.
+   -A function or class declaration may span multiple lines; the parser does not care about lines. An entire file is re-parsed
+    periodically whenever it changes. The parser will also look at namespace declarations
+   -If the line containing a function declaration also contains the closing curly bracket, the function is only on that line.
+   -If the line after a function/class/namespace declaration is indented, the end of the function/etc is detected by finding the
+    next line that has the same indentation level as the declaration.
+   -If the next line is not indented, the end of the function/etc is detected by scanning for a closing bracket (taking new
+    opening brackets into account)
+  -The parser can figure out the names of all of the stuff and which lines they start and end on. You can't have two functions
+   on the same line because that is stupid.
+ -If there are comments directly above a function or class, they are associated with the function/class.
+
+-There are also history tracking features
+ -The edit history tracks all of the lines that were edited and when
+ -The view history tracks all of the lines that were clicked on or edited. It also tracks all of the code that was ever viewed
+  and measures the view duration.
+ -Each line of code is assigned an edit rating and a view rating based on the edit/view history
+  -For the edit rating, each edit is assigned a weight based on how long ago it happened. An edit is an insertion or deletion
+   of one character. Cutting code is treated like deleting all of the characters one by one and pasting code is counted the
+   same as if it were typed in character by character.
+   -The edit rating of each line is the sum of the edit ratings of each edit that happened on that line.
+   -Each line has a numerical id that is preserved when other lines are created or deleted. If a newline character is deleted,
+    the two ids of the associated lines are merged together along with their edit history. If a newline is inserted in the
+    middle of a line, a new id is allocated for one of the new lines and the edit history is partitioned based on which
+    part of the line it affected (which requires each character to be identifyable).
+   -The easiest way to make characters identifyable is to just give every single character its own id. However, ranges of
+    characters should be assigned a range of ids to reduce space usage. This can be done for lines as well.
+   -Can just deal with characters and not worry about lines. There is a mapping of lines to characters somewhere, but it can
+    be regenerated. So, each character has an id and operations apply to individual characters. Each operation has a list of
+    ranges of ids that it applies to.
+   -Characters can be created or destroyed, but not modified.
+   -Deletions are associated with the two adjacent characters. An insertion is associated with the newly inserted character only
+  -For views, all view operations are associated with a duration. The editor will also check if it is idle (e.g. editor window
+   not visible or no user input for 5 minutes)
+   -Moving the cursor is a view operation on the two characters adjacent to the cursor
+   -Selecting text is not a view operation, although any cursor movement is
+   -Hovering the mouse over a character is a view operation. Hovering it over a line is a view operation for the newline
+    character.
+   -Looking at code is a view operation for all of the code on screen. The code is weighted based on how close it is to the
+    center of the screen. This only counts for the main pane, not for the side panes.
+  -Each line of code is assigned a view and an edit rating based on the characters in that line.
+  -The code is partitioned into blocks, where the minimum block size is 8 lines or so and the sum of the weights is maximized
+   for both read and edit mode. The maximum block size is 64 lines or so.
+   -To partition a file into blocks, the line with the maximum weight is first. Adjacent lines are merged into that block until
+    there are at least 8 lines, using a greedy algorithm. The merging continues as long as the ratio between the maximum
+    weight in the block and the newly added line is above a certain value. Once the first block is created, the next block is
+    created from the maximum weight line excluding the lines in the first block. This keeps going until all the entire file
+    is partitioned into blocks.
+   -There may be pre-defined blocks which group the code e.g. by function and class. These may be nested. The auto-generated
+    blocks will not cross a boundary between pre-defined blocks. This creates a tree where the auto-generated blocks are
+    leaf nodes and functions, files, and classes are internal nodes.
+  -The blocks may be sorted by average view or edit rating and then displayed.
+ -Durations are measured in real time (for view operations). Timestamps are measured based on a counter that is increased
+  by one whenever the user presses any keyboard or mouse buttons, or uses the mouse wheel
+
+-Basic ui:
+ -While the user is editing code, they are assumed to have both hands on the keyboard. If they are reading code, they are
+  assumed to have one hand on the mouse.
+ -The left pane displays a file like in a normal text editor.
+ -The right pane is split in half horizontally. The top half displayed recently viewed blocks, and the bottom half displays
+  recently edited blocks. Alternatively, each block can be color coded based on whether it was viewed or edited and they can
+  be displayed in the same pane.
+ -Each line is color coded based on its view or edit weight. If the edit weight is non-neglible, it is used. Otherwise, the
+  view weight is used. Only the line number foreground is color coded. Edited lines are red and viewed lines are green. Lines
+  that aren't viewed or edited are gray. The background color is dark.
+ -Each block has a context, which consists of the filename, class name, and function name (if available). A few lines around the
+  block are also displayed. The line number is also displayed in the context.
+ -Clicking on a block causes the left pane to go to that block. The block is centered on the left pane; if necessary, the file
+  is scrolled so that additional lines are present above the top or below the bottom. This counts as a view operation (either
+  directly or by changing the cursor position)
+
+-History and views:
+ -Whenever the editor is in use, there is always a current view which has all of the history tracking metadata.
+ -A view can be cloned. This does not actually copy the metadata. Instead, multiple views can share metadata, since metadata
+  is associated with a timestamp and cannot be modified.
+ -Metadata is never automatically freed, although the user can manually free old metadata if it is too big.
+ -Views can be deleted.
+ -Views can be seeked to any previous state. To help do this, all of the edits that ever happened can be viewed chronologically.
+  -This creates a copy of the view.
+  -The chronological history shows the current version of the source code.
+ -You can switch views at any time. Each view has its own history.
+ -There is a master view which contains the combined history for all of the views. This is also the default view. When a new
+  view is created, the master view is actually cloned.
+
+-Project tree:
+ -The files and folders form the first level of the project tree. Next are global functions and classes (variables are not
+  considered), which include the namespace in their names. Next are nested classes and class functions.
+ -An entity is a folder, file, function, or class. Namespaces are not entities. Files and folders are in alphabetical order.
+ -If you want to, you can view the entire source code for your project as one long document by viewing the root folder and
+  expanding everything.
+  -This is kind of dumb. It may be useful for the search feature.
+  -This isn't very useful for the search feature. Do not implement it.
+ -The left pane can view one file or folder. It cannot view individual classes or functions.
+ -Nested entities in the left pane (classes, files, etc) can be collapsed or expanded.
+ -By default, nested files and folders are collapsed, classes are expanded, and functions are collapsed.
+ -Moving the text cursor on top of an entity will expand it. Moving the cursor out of the entity will collapse it.
+ -Entities can be pinned, which causes them to remain expanded. They can be manually collapsed which also unpins them.
+  -Pin and collapse operations are based on the text cursor position; they will operate on the entity that contains that
+   character and whose tree depth is greatest.
+  -Editing an entity will pin it.
+  -Clicking on a block in the right pane will pin it. All other functions are collapsed.
+  -Viewing a different file in the left pane will unpin everything in the old file. Clicking on a block in the right pane
+   if the associated file is in the left pane will not unpin anything.
+  -There is an unpin all command.
+
+-Text search
+ -Searching creates a search block at the end of the right pane. The user can view their old search queries there.
+ -The results of the search are in the left pane. The results for an old search can be viewed by clicking on a search query
+  in the right pane.
+ -Each search has a context, which is either the current file or the root folder by default. It can be any entity including
+  functions.
+ -The search string is a list of tokens. Whitespace and comments are ignored (however, two tokens separated by a space are
+  treated differently from one token with no spaces). A token can have an asterisk in it as a wildcard character (which also
+  matches an asterisk character). Searching is case sensitive
+ -There is a current search query. It is still valid even if the left pane is displaying something else. Pressing keyboard
+  shortcuts will iterate through the search results.
+ -Actually, the search results are displayed in the right pane as a list of blocks. Clicking on a block will select the result.
+  The rest of the history is hidden in this mode. Once you exit the search results, the search query just shows up as a single
+  block and the rest of the results are visible.
+ -The first search result is automatically selected when you do a search.
+ -The text search is done by writing a single string: [search query] <tab> [context]. if the context is left blank, it is the
+  current file. if it is 'a', it is the root folder. otherwise all of the entities are scanned for a matching one. the context
+  can have asterisks.
+ -If you have any text selected in the left pane when doing a search, that is set to the search query automatically. tabs are
+  ignored.
+ -By default, the first and last tokens in the search query and context query have asterisks inserted at the start and end
+  automatically. This can be overrridden by including a space at the start or end of the query.
+ -The default context is whatever was used for the previous search.
+ -There is a hotkey which will just search for the selected text without asking for any other inputs.
+
+-Entity search
+ -You can search for an entity by name, including wildcards. This acts basically the same as searching for text except that
+  there is no context.
+ -The text search uses an entity search for the context, if it is specified. It will automatically use the first match. If the
+  search is ambiguous or not found, it will display an error if not found or the list of options if ambiguous.
+
+-Compiler log
+ -Whenever you compile stuff, the compiler output is parsed and shown on the right pane the same way the search output is.
+  -The line numbers in the compiler output are converted to ids to allow the code to be edited.
+  -There ideally is syntax highlighting for compiler output. The error message text is highlighted so that it can be
+   differerentiated from the code.
+  -The parser will also detect whether each message is an error or a warning.
+ -The next/previous search result buttons will also iterate the compile log.
+
+-Implementation order:
+ -GUI and basic custom text editor that uses a bmp font. Should support input, selection, cut, copy, and paste. No
+  right click menu
+  -Can autogenerate the bitmap font from a regular font. Also need bold, italic versions
+   -Can use this tool: http://www.angelcode.com/products/bmfont/
+  -GUI doesn't have anything except the text editor
+  -Also need a scroll bar and line number counter for the text editor. Also needs to support line wrapping for selected lines
+  -Should also support these features: select text and hit tab or shift-tab to indent or unindent the text, home, ctrl-home, end
+   ctrl-end
+  -Don't really need overwrite mode since i never use it
+  -Only a single pane is present currently. No syntax highlighting or parsing
+  -Note: with dev-cpp, can fit 182 characters horizontally
+ -View/edit history tracking
+  -For view tracking, only track selected characters and don't bother tracking durations. Don't track mouse movement
+  -For edit tracking, only track inserted and deleted characters
+  -Each character has a 4-byte id. For each file in the project, there is also a character id file. Ids can't be reused
+   -There is a next id. Typing a character will use the next id for it and increment the next id
+   -In memory, each character has 4 byte id stored for it
+   -On disk, do the same but just compress the file and have the compression algorithm deal with compacting the ids
+    -I could come up with some special format but it is a waste of time
+    -Actually, don't even bother compressing the files for now.
+    -Can store the ids as deltas to make the compression better.
+   -You can't change the source file outside of the editor. This is enforced by storing a copy of the source file in the
+    character id file to make sure it hasn't changed.
+  -There is a project settings file which just has each setting on one line
+  -The first setting is a list of file extensions that are part of the project
+  -The root directory (which contains the project file) is scanned during startup. There should also be a project data file
+   in the root directory which has all of the character ids and copies of the source files
+   -Will discover if any files changed. If that happens, writes to that file are disabled. The old version is used for reads.
+    This is a conflict.
+   -If there is a new file, it will not be automatically added to the project. This is a conflict as well
+   -If a file was deleted, it will get recreated automatically. This is not a conflict
+   -If there are any conflicts, the editor will output them to the console window
+  -During a save, the editor will write a new version of the project data file. It will then synchronize all of the modified
+   files and then finally delete the old version of the project data file and rename the new version.
+   -If a file that needs to be synchronized was deleted, it will get recreated automatically
+   -If a file was modified so that its contents do not match the expected contents, that is a conflict. That file will not
+    get synchronized and writes to it are disabled. However, the project data file will still contain the new version of the
+    file.
+  -Conflicts, file management
+   -If there are conflicts, the user can force a rescan of the project directory to see if they are resolved. Data about
+    conflicts goes to the console window.
+   -The user can also resolve all of the conflicts in favor of the project directory instead of the data file.
+    -This is executed manually and requires confirmation.
+    -Deleting a file in the project directory will delete it in the data file. Note: deleted files are recreated automatically
+     when doing a save or at startup, so you have to delete the file and then force a rescan.
+     -Actually, files are not created automatically. Whenever conflicts are detected, the user is asked what to do.
+    -Moved files are detected by comparing the contents of the files in the project directory with files in the data file.
+     If there are two files with the same content, it is impossible to detect if they have moved.
+    -New files are added to the data file.
+   -To manage files, the user uses windows explorer and then rescans the project or restarts the ide. It will prompt them
+    about what to do. Options are to do nothing, recreate deleted files, or sync project data with root directory.
+  -Log files
+   -The log files contain the view/edit history data
+   -They are located in a separate directory. Each log file has a date as part of its name. A new log file is created when the
+    old file exceeds like 1MB.
+    -For now, just have one log file.
+   -All of the log files in the directory are scanned at startup. During a save, they are appended to.
+  -Log format
+   -The log is a bunch of log entries concatenated together.
+   -There is one byte for the log entry type.
+   -Edit insertion: 4 byte id. Could also store the id of an adjacent character and the byte that was inserted to allow the
+    files to be reconstructed from the log. The adjacent character is to the left of the inserted character.
+   -Edit deletion: 4 byte id of deleted character, 4 byte id of an adjacent character that wasn't deleted. Any log entries for
+    the deleted character are transferred to the adjacent character. The adjacent character is to the left of the deleted
+    character.
+   -View selection: 4 byte id of selected character
+   -File creation: Each file has an initial character id and a file name. The initial id acts like an invisible character that
+    is before the start of the file. The file's id is its initial character id.
+   -File deletion: Lists the file id. Can figure out which characters were deleted from the log file.
+   -File move: Lists the file id and a string containing the new filename.
+   -Timestamp: Stores the current time. One log entry of this type is stored per save.
+   -Folders are automatically detected based on the file names.
+  -On startup, the entire log is scanned and accumulated after the files are loaded. This groups the log entries based on
+   which character id they affect. Note: a deletion will also transfer the log entries for that character id to the adjacent
+   character id
+  -The project data file isn't necessary if the log file exists and is scanned on startup. Just use the log file. The project
+   data file could checkpoint a certain position in the log file, but it would probably be better to just put the checkpoint
+   in the log file or have a separate checkpoint file.
+  -In memory, each file has a linked list of characters associated with it. Characters are also indexed by id in a hash table.
+   -Characters are also stored in a red-black tree indexed by modification time. Times are equivalent to log offsets (i.e an
+    operation associated with the 5th entry in the log has time 5).
+   -Each character contains a byte which specifies what the character is along with a deque of operations that apply to that
+    character, ordered by log id
+   -Each file has a line cache which is also a linked list. Each line of the file has an entry in that linked list. The initial
+    invisible character of the file is also treated like a newline character. Each entry contains an iterator to the initial
+    leading newline character in the file's linked list and the entry also contains a string representing that line. The string
+    may be empty if the line is not cached. If it is not empty, it will always start with a newline character and does not
+    contain any other newlines.
+   -There is also a line array which contains references to the line cache. It is marked dirty whenever a new line is created
+    or a line is deleted, which requires the array to be regenerated from the line list.
+  -History recalculation is batched and possibly runs in the background in a separate thread (make it run in the foreground
+   initially)
+   -There is some cut-off point; anything older than the cutoff point is not stored in the red-black tree and is not part of the
+    history.
+   -The history recalcuation algorithm iterates the red-black tree, generates batches, and outputs an ordered list of batches.
+    Each batch contains references to newline characters to indicate where it starts and ends.
+    -A reference points to a character object, which also tracks all of its back-references. If a character is deleted, the
+     back-references are iterated to make them point to the new character. However, a reference to a newline character can
+     only point to other newlines.
+    -A queue should be sufficient instead of a red-black tree.
+  -Basic UI
+   -There is already a text editor interface. This same interface is used for the history pane
+   -Initially, the history pane can just be implemented in plain text. Some graphics could be added later
+   -When the history is refreshed, it will create some text output where each line is part of an entry. Clicking on that entry
+    will change what is displayed in the left pane.
+ -Opening a file in windows explorer should also display it in the editor. The editor process needs to check if an instance is
+  already running and tell that instance to open the file if so.
+  -If not, the editor needs to look for a project file to tell it where the root directory is. If there is no project file,
+   it will exit. User can create an empty project file manually.
+ -The search features do not need to be implemented at first
+ -History blocks do not take functions or classes into account at first
+ -Syntax highlighting and auto-indent is required to have a usable ide
+  -Syntax highlighting is easy. The line cache string described above will also include syntax highlighting metadata in a
+   separate string.
+  -Auto indent is also easy.
+ -So, at this point I would have a working ide that i could use for programming shit. The only on-disk state is the log file
+  which probably isn't going to have its format changed because of how low-level it is.
+ -Searching:
+  -Need a tokenized string cache. This can also be used to generate syntax highlighting
+  -Just do a linear search of each file; no indexing
+  -The asterisk will match a single token by default. Matching multiple tokens seems too complicated and can be done later
+  -UI just uses the existing components
+  -
